@@ -1,0 +1,403 @@
+#include<bits/stdc++.h>
+using namespace std;
+
+set<char> nonter;  //非终结符
+set<char> ter;  //终结符
+map<char, set<char> > First;  //每个非终结符的First集
+map<vector<char>, set<char> > FirstS;  //产生式右部的First集
+map<char, set<char> > Follow;  //每个非终结符的Follow集
+map<char, map<char, vector<char> > > Table;  //预测表  非终结符  终结符以及其对应的产生式的右部
+
+struct production  //产生式结构体
+{
+    char left;  
+    vector<char> right;  
+    set<char> Select;  
+};
+
+vector<production> pro;  //所有产生式
+
+void getfirst()
+{
+    int flag = 1, s, s1;
+    for (int i = 0; i < pro.size(); i++)  
+    {
+        if (pro[i].right[0] < 'A' || pro[i].right[0]>'Z')  
+            First[pro[i].left].insert(pro[i].right[0]);  
+    }
+    while (flag == 1)
+    {
+        flag = 0;
+        for (int i = 0; i < pro.size(); i++)  //遍历所有产生式
+        {
+            for (int j = 0; j < pro[i].right.size(); j++)  //遍历一产生式的右部
+            {
+                if (pro[i].right[j] >= 'A' && pro[i].right[j] <= 'Z')  //该位置为非终结符
+                {
+                    if (First[pro[i].right[j]].find('e') != First[pro[i].right[j]].end())  //并且其First集中包含空串  E->AB  A->a|e
+                    {  //将其First集除去空串后加入产生式左部的First集中，并继续判断下一符号
+                        s = First[pro[i].left].size();  
+                        for (set<char>::iterator it = First[pro[i].right[j]].begin(); it != First[pro[i].right[j]].end(); it++)  //
+                        {
+                            First[pro[i].left].insert(*it);//将A的First集中所有符号加入到E的First集中
+                        }
+                        s1 = First[pro[i].left].size();
+                        if (s1 > s)
+                            flag = 1;
+                        if (j != pro[i].right.size() - 1)  //如果此非终结符不是右部的最后一个符号，那么出去e，继续往下判断
+                            First[pro[i].left].erase('e');
+                        j++;
+                    }
+                    else  //如果其First集中不包含空串，则将其First集加入产生式左部的First集中，并结束对该产生式的处理
+                    {
+                        s = First[pro[i].left].size();
+                        for (set<char>::iterator it = First[pro[i].right[j]].begin(); it != First[pro[i].right[j]].end(); it++)
+                        {
+                            First[pro[i].left].insert(*it);
+                        }
+                        s1 = First[pro[i].left].size();
+                        if (s1 > s)
+                            flag = 1;
+                        break;
+                    }
+                }
+                else  //如果是终结符，就加入到First集中，并结束对该产生式的处理
+                {
+                    s = First[pro[i].left].size();
+                    First[pro[i].left].insert(pro[i].right[j]);
+                    s1 = First[pro[i].left].size();
+                    if (s1 > s)
+                        flag = 1;
+                    break;
+                }
+            }
+        }
+    }
+}
+
+void getfirstS()  //对每个产生式右部，求其对应的First集
+{
+    for (int i = 0; i < pro.size(); i++)
+    {
+        for (int j = 0; j < pro[i].right.size(); j++)
+        {
+            if (pro[i].right[j] >= 'A' && pro[i].right[j] <= 'Z')  //如果该符号是非终结符
+            {
+                if (First[pro[i].right[j]].find('e') != First[pro[i].right[j]].end())  //且First集中包含空串
+                {  //则将其First集除去空串后加入到右部的First集中，并继续判断下一个符号
+                    for (set<char>::iterator it = First[pro[i].right[j]].begin(); it != First[pro[i].right[j]].end(); it++)
+                    {
+                        FirstS[pro[i].right].insert(*it);
+                    }
+                    if (j != pro[i].right.size() - 1)
+                        FirstS[pro[i].right].erase('e');
+                    j++;
+                }
+                else
+                {
+                    for (set<char>::iterator it = First[pro[i].right[j]].begin(); it != First[pro[i].right[j]].end(); it++)
+                    {
+                        FirstS[pro[i].right].insert(*it);
+                    }
+                    break;
+                }
+            }
+            else  //否则，将其加入到右部的First集中，并结束对该产生式右部的处理
+            {
+                FirstS[pro[i].right].insert(pro[i].right[j]);
+                break;
+            }
+        }
+    }
+}
+
+void getfollow()  //循环遍历所有产生式和产生式右部的每个符号，依据符号的类型判断分别进行操作
+{
+    Follow['E'].insert('#');  //文法的开始符号，则将#加入其Follow集中
+    int flag = 1, s, s1;
+    while (flag == 1)
+    {
+        flag = 0;
+        for (set<char>::iterator it = nonter.begin(); it != nonter.end(); it++)  //遍历非终结符
+        {
+            for (int i = 0; i < pro.size(); i++)  //遍历产生式
+            {
+                for (int j = 0; j < pro[i].right.size(); j++)  //遍历产生式右部
+                {
+                    if (pro[i].right[j] == *it)  //如果是该非终结符
+                    {
+                        if (j == pro[i].right.size() - 1)  //并且是右部的尾
+                        {
+                            s = Follow[*it].size();
+                            for (set<char>::iterator it1 = Follow[pro[i].left].begin(); it1 != Follow[pro[i].left].end(); it1++)
+                            {
+                                Follow[*it].insert(*it1);
+                            }
+                            s1 = Follow[*it].size();
+                            if (s1 > s)
+                                flag = 1;
+                            break;
+                        }
+                        if (pro[i].right[j + 1] >= 'A' && pro[i].right[j + 1] <= 'Z')  //如果后继符号是非终结符
+                        {
+                            if (First[pro[i].right[j + 1]].find('e') != First[pro[i].right[j + 1]].end())//First集中包含空串，则将Follow集加入其产生式左部符号的Follow集中
+                            {
+                                for (set<char>::iterator it1 = First[pro[i].right[j + 1]].begin(); it1 != First[pro[i].right[j + 1]].end(); it1++)
+                                {
+                                    Follow[*it].insert(*it1);
+                                }
+                                Follow[*it].erase('e');
+                                for (set<char>::iterator it1 = Follow[pro[i].right[j + 1]].begin(); it1 != Follow[pro[i].right[j + 1]].end(); it1++)
+                                {
+                                    Follow[*it].insert(*it1);
+                                }
+                                break;
+                            }
+                            else//First集中不包含空串
+                            {
+                                s = Follow[*it].size();
+                                //cout << s<<endl;
+                                for (set<char>::iterator it1 = First[pro[i].right[j + 1]].begin(); it1 != First[pro[i].right[j + 1]].end(); it1++)
+                                {
+                                    Follow[*it].insert(*it1);
+                                }
+                                s1 = Follow[*it].size();
+                                //cout << s1;
+                                if (s1 > s)
+                                    flag = 1;
+                                break;
+                            }
+                        }
+                        else//不是右部的尾，后继符号不是非终结符
+                        {
+                            s = Follow[*it].size();
+                            Follow[*it].insert(pro[i].right[j + 1]);
+                            s1 = Follow[*it].size();
+                            if (s1 > s)
+                                flag = 1;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+void getselect()
+{
+    for (int i = 0; i < pro.size(); i++)
+    {
+        if (FirstS[pro[i].right].find('e') != FirstS[pro[i].right].end())
+        {
+            for (set<char>::iterator it = FirstS[pro[i].right].begin(); it != FirstS[pro[i].right].end(); it++)
+            {
+                pro[i].Select.insert(*it);
+            }
+            pro[i].Select.erase('e');
+            for (set<char>::iterator it = Follow[pro[i].left].begin(); it != Follow[pro[i].left].end(); it++)
+            {
+                pro[i].Select.insert(*it);
+            }
+        }
+        else
+        {
+            for (set<char>::iterator it = FirstS[pro[i].right].begin(); it != FirstS[pro[i].right].end(); it++)
+            {
+                pro[i].Select.insert(*it);
+            }
+        }
+    }
+}
+
+
+
+
+void getTable()
+{
+    cout << "  ";
+    for (set<char>::iterator it = ter.begin(); it != ter.end(); it++)
+    {
+        cout << *it << "  ";
+    }
+    cout << endl;
+    for (set<char>::iterator it = nonter.begin(); it != nonter.end(); it++)
+    {
+        cout << *it << " ";
+        for (set<char>::iterator it1 = ter.begin(); it1 != ter.end(); it1++)
+        {
+            Table[*it][*it1].push_back('0');
+            for (int i = 0; i < pro.size(); i++)
+            {
+                if (pro[i].left == *it)
+                {
+                    for (set<char>::iterator it2 = pro[i].Select.begin(); it2 != pro[i].Select.end(); it2++)
+                    {
+                        if (*it1 == *it2)
+                        {
+                            Table[*it][*it1] = pro[i].right;
+                        }
+                    }
+                }
+            }
+            for (int j = 0; j < Table[*it][*it1].size(); j++)
+                cout << Table[*it][*it1][j];
+            cout << " ";
+        }
+        cout << endl;
+    }
+}
+stack<char> ayl, rests;
+int showayl(stack<char> s)
+{
+    string str = "";
+    while (!s.empty()) {
+        str += s.top();
+        s.pop();
+    }
+    for (int i = str.length() - 1; i >= 0; i--) {
+        cout << str[i];
+    }
+    return str.length();
+}
+int showrests(stack<char> s)
+{
+    int sum = 0;
+    while (!s.empty())
+    {
+        cout << s.top();
+        s.pop();
+        sum++;
+    }
+    return sum;
+}
+void Jdg(string s)
+{
+    ayl.push('#');
+    ayl.push('E');
+    rests.push('#');
+    for (int i = s.length() - 1; i >= 0; i--)
+    {
+        rests.push(s[i]);
+    }
+    while (ayl.top() != '#')
+    {
+        int n = showayl(ayl);
+        cout << "           ";
+        for (int i = 1; i < n; i++)
+            cout << '\b';
+        n = showrests(rests);
+        cout << "           ";
+        for (int i = 1; i < n; i++)
+            cout << '\b';
+        char a = ayl.top();
+        char r = rests.top();
+        if (a == r)
+        {
+            cout << a << "匹配" << endl;
+            rests.pop();
+            ayl.pop();
+        }
+        else
+        {
+            cout << a << "->";
+            for (int i = 0; i < Table[a][r].size(); i++)
+            {
+                cout << Table[a][r][i];
+            }
+            cout << endl;
+            ayl.pop();
+            for (int i = Table[a][r].size() - 1; i >= 0; i--)
+            {
+                if (Table[a][r][i] != 'e')
+                    ayl.push(Table[a][r][i]);
+            }
+        }
+    }
+    if (ayl.top() == rests.top())
+        cout << "接受" << endl;
+    else
+        cout << "错误" << endl;
+}
+int main()
+{
+    string str;
+    ifstream in("grammer.txt");
+    ostringstream  tmp;
+    tmp << in.rdbuf();
+    in.close();
+    str = tmp.str();
+    int lenth = str.length();
+    ter.insert('#');
+    for (int i = 0; i < lenth; i++)
+    {
+        production p;
+        p.left = str[i];
+        cout << str[i] << "->";
+        nonter.insert(str[i]);
+        i += 3;
+        while (str[i] != '\n' && str[i] != '\t')
+        {
+            if (str[i] < 'A' || str[i]>'Z' && str[i] != 'e')
+                ter.insert(str[i]);
+            cout << str[i];
+            p.right.push_back(str[i]);
+            i++;
+        }
+        cout << endl;
+        pro.push_back(p);
+    }
+    getfirst();
+    getfirstS();
+    getfollow();
+    getselect();
+        
+    for (set<char>::iterator it = nonter.begin(); it != nonter.end(); it++)
+    {
+        cout << "First(" << *it << ")={";
+        for (set<char>::iterator it1 = First[*it].begin(); it1 != First[*it].end(); it1++)
+        {
+            cout << "'" << *it1 << "',";
+        }
+        cout << '\b' << "}" << endl;
+    }
+    for (int i = 0; i < pro.size(); i++)
+    {
+        cout << "First(";
+        for (int j = 0; j < pro[i].right.size(); j++)
+            cout << pro[i].right[j];
+        cout << ")={";
+        for (set<char>::iterator it = FirstS[pro[i].right].begin(); it != FirstS[pro[i].right].end(); it++)
+        {
+            cout << "'" << *it << "',";
+        }
+        cout << '\b' << "}" << endl;
+    }
+    cout << "---------------------------------------" << endl;
+    for (set<char>::iterator it = nonter.begin(); it != nonter.end(); it++)
+    {
+        cout << "Follow(" << *it << ")={";
+        for (set<char>::iterator it1 = Follow[*it].begin(); it1 != Follow[*it].end(); it1++)
+        {
+            cout << "'" << *it1 << "',";
+        }
+        cout << '\b' << "}" << endl;
+    }
+    cout << "---------------------------------------" << endl;
+    for (int i = 0; i < pro.size(); i++)
+    {
+        cout << "Select(" << pro[i].left << "->";
+        for (int j = 0; j < pro[i].right.size(); j++)
+            cout << pro[i].right[j];
+        cout << ")={";
+        for (set<char>::iterator it = pro[i].Select.begin(); it != pro[i].Select.end(); it++)
+        {
+            cout << "'" << *it << "',";
+        }
+        cout << '\b' << "}" << endl;
+    }
+    getTable();
+    cout << "请输入表达式:";
+    string s;
+    cin >> s;
+    Jdg(s);
+}
